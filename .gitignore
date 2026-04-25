@@ -1,0 +1,21 @@
+# compiled Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# macOS metadata
+.DS_Store
+
+# IDE / editor config
+.idea/
+.vscode/
+
+# FITS data (tests only)
+*.fit
+*.fits
+
+# virtual environments
+.venv/

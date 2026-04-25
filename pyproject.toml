@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "caltools"
+version = "0.1.0"
+description = "CMOS detector characterization library for astronomical imaging"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Evan Watson", email = "etwatson@ucsd.edu" },
+]
+keywords = ["astronomy", "CMOS", "detector", "characterization", "EMVA-1288", "calibration"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "astropy>=5.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/ev-watson/caltools"
+Repository = "https://github.com/ev-watson/caltools"
+
+[tool.setuptools.packages.find]
+include = ["caltools*"]
