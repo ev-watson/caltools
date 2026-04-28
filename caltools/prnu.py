@@ -22,7 +22,7 @@ def prnu_map(
     dark: Optional[Frame] = None,
     roi: Optional[ROI] = None,
 ) -> AnalysisResult:
-    """Compute PRNU from a zenith flat stack.
+    """Compute PRNU from a flat-field stack.
 
     PRNU = std(normalized_master_flat) expressed as a percentage.
     The master flat is normalized to unit median.
@@ -34,7 +34,7 @@ def prnu_map(
     bias : Frame
         Master bias.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     dark : Frame, optional
         Scaled master dark (same exposure as flats).
     roi : ROI, optional
@@ -56,8 +56,8 @@ def prnu_map(
         scalar_summary={
             "prnu_std": prnu_std,
             "prnu_percent": prnu_percent,
-            "flat_median_adu": float(np.median(mf)),
-            "flat_mean_adu": float(np.mean(mf)),
+            "flat_median": float(np.median(mf)),
+            "flat_mean": float(np.mean(mf)),
             "n_frames": len(flat_paths),
         },
         maps={

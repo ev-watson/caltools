@@ -1,8 +1,8 @@
 """
 caltools.dark — Dark current analysis, temperature dependence, warm pixels.
 
-Methods follow EMVA-1288 dark current measurement protocol.
-Temperature fitting uses Arrhenius/Widenhorn 2001 model where data permits.
+Dark-current measurements from dark frames, with optional Arrhenius
+temperature fitting where the data support it.
 """
 
 from __future__ import annotations
@@ -13,8 +13,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 from ._types import AnalysisResult, Frame, ROI, SensorConfig
-from .io import load_frame
-from .stats import mad_sigma, outlier_mask
+from .stats import outlier_mask
 from .stacking import master_dark
 
 
@@ -33,9 +32,9 @@ def dark_current_vs_exposure(
     bias : Frame
         Master bias.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     roi : ROI, optional
-        Central ROI.
+        Region of interest.
 
     Returns
     -------
@@ -115,24 +114,25 @@ def dark_current_vs_temperature(
     config: SensorConfig,
     roi: Optional[ROI] = None,
 ) -> AnalysisResult:
-    """Fit dark current vs temperature (Arrhenius / Widenhorn 2001).
+    """Fit dark current vs temperature with an Arrhenius model.
 
     Parameters
     ----------
     dark_groups : dict
         ``{temperature_C: (file_paths, exptime_s)}`` — dark frames grouped
-        by sensor temperature.
+        by detector temperature.
     bias : Frame
         Master bias.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     roi : ROI, optional
-        Central ROI.
+        Region of interest.
 
     Returns
     -------
     AnalysisResult. Note: with a narrow temperature range (~6 C) the
-    Arrhenius fit will be poorly constrained — CIs are reported.
+    Arrhenius fit will be poorly constrained; covariance-based parameter
+    uncertainties are reported when available.
     """
     g = config.gain_e_per_adu
     temps = []
@@ -148,14 +148,10 @@ def dark_current_vs_temperature(
     temps = np.array(temps)
     dark_rates = np.array(dark_rates)
 
-    # Attempt Arrhenius fit
-    scalars = {
-        "temperatures_c": list(temps),
-        "dark_rates_e_per_s": list(dark_rates),
-    }
+    scalars: Dict[str, float] = {}
     fit_success = False
 
-    temp_range = float(temps.max() - temps.min())
+    temp_range = float(temps.max() - temps.min()) if temps.size else 0.0
     if len(temps) >= 3 and temp_range >= 1.0:
         try:
             popt, pcov = curve_fit(
@@ -182,8 +178,8 @@ def dark_current_vs_temperature(
         name="dark_current_vs_temperature",
         scalar_summary=scalars,
         metadata={
-            "temps": temps,
-            "dark_rates": dark_rates,
+            "temperatures_c": temps,
+            "dark_rates_e_per_s": dark_rates,
             "fit_success": fit_success,
         },
     )
@@ -193,21 +189,21 @@ def dark_spatial_structure(
     master_darks: Dict[float, Frame],
     config: SensorConfig,
 ) -> AnalysisResult:
-    """2-D glow maps at each exposure time.
+    """Summarize 2-D dark-signal structure at each exposure time.
 
     Parameters
     ----------
     master_darks : dict
         ``{exptime_s: master_dark_frame}`` (bias-subtracted).
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     """
     g = config.gain_e_per_adu
     scalars = {}
     maps = {}
 
     for exp, md in sorted(master_darks.items()):
-        maps[f"glow_{exp}s"] = md.astype(np.float32)
+        maps[f"dark_structure_{exp}s"] = md.astype(np.float32)
         scalars[f"mean_{exp}s_adu"] = float(np.mean(md))
         scalars[f"mean_{exp}s_e"] = float(np.mean(md)) * g
         scalars[f"std_{exp}s_adu"] = float(np.std(md))
@@ -240,11 +236,11 @@ def warm_pixel_map(
     bias : Frame
         Master bias.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     threshold_sigma : float
         Detection threshold in MAD-sigma units.
     roi : ROI, optional
-        Central ROI.
+        Region of interest.
     """
     g = config.gain_e_per_adu
     scalars = {}

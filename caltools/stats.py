@@ -2,13 +2,13 @@
 caltools.stats — Statistical utilities for detector characterization.
 
 Welford online accumulator, robust estimators, gaussianity tests,
-and the per-pixel sigma-vs-mean preparation (Alarcon+2023 Fig. 3).
+and per-pixel sigma-vs-mean preparation for diagnostic plots.
 """
 
 from __future__ import annotations
 
 import warnings
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 from scipy import stats as sp_stats
@@ -156,7 +156,7 @@ def sigma_vs_mean_2d(
     n_sub: int = 500_000,
     seed: int = 42,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Prepare subsampled (mean, std) arrays for Alarcon+2023 Fig. 3.
+    """Prepare subsampled (mean, std) arrays for diagnostic plots.
 
     Parameters
     ----------

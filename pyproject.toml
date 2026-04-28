@@ -1,18 +1,18 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "caltools"
 version = "0.1.0"
-description = "CMOS detector characterization library for astronomical imaging"
+description = "Detector characterization tools for FITS-based astronomical imaging"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "Evan Watson", email = "etwatson@ucsd.edu" },
 ]
-keywords = ["astronomy", "CMOS", "detector", "characterization", "EMVA-1288", "calibration"]
+keywords = ["astronomy", "FITS", "detector", "characterization", "calibration", "photon transfer", "read noise", "dark current"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",

@@ -1,5 +1,5 @@
 """
-caltools.gain — Photon Transfer Curve, gain measurement, and FWC.
+caltools.gain — Photon transfer curves, gain measurement, and full well.
 
 PTC method: all-pairs differencing of flat-field frames across
 multiple exposure levels. Both free and fixed-intercept fits.
@@ -19,13 +19,23 @@ def _linear_least_squares(
     x: np.ndarray,
     y: np.ndarray,
 ) -> Tuple[float, float, np.ndarray]:
-    """Weighted OLS: y = m*x + c.  Returns (slope, intercept, 2x2 Cov)."""
+    """Unweighted OLS: ``y = m*x + c``.
+
+    Returns ``(slope, intercept, parameter_covariance)`` where
+    parameter_covariance is the 2x2 covariance matrix of (slope, intercept):
+    ``cov = sigma_residual^2 * (B^T B)^-1``, with
+    ``sigma_residual^2 = sum(residuals^2) / (n - 2)``.
+    """
     x = np.asarray(x, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
     B = np.column_stack((x, np.ones_like(x)))
     BTB_inv = np.linalg.inv(B.T @ B)
     params = BTB_inv @ (B.T @ y)
-    return float(params[0]), float(params[1]), BTB_inv
+    residuals = y - B @ params
+    n = len(y)
+    sigma2 = float(np.sum(residuals ** 2) / (n - 2)) if n > 2 else 0.0
+    cov = sigma2 * BTB_inv
+    return float(params[0]), float(params[1]), cov
 
 
 def _ptc_pairs_from_group(
@@ -74,16 +84,17 @@ def photon_transfer_curve(
     bias : Frame
         Master bias (full frame or matching ROI).
     config : SensorConfig
-        Sensor configuration (provides initial RON estimate).
+        Detector configuration; included for consistency with other
+        characterization functions.
     roi : ROI, optional
-        Central ROI to use (avoids edges/vignetting).
+        Region of interest for statistics.
     method : str
-        ``"all_pairs"`` — form all C(N,2) pairs per group (robust).
+        ``"all_pairs"`` — form all C(N,2) pairs per group.
 
     Returns
     -------
-    AnalysisResult with gain, RON, fit parameters in scalar_summary,
-    and PTC data arrays in metadata (for plotting).
+    AnalysisResult with gain, read-noise estimate, fit parameters in
+    scalar_summary, and PTC data arrays in metadata for plotting.
     """
     # Prepare bias for ROI
     bias_roi = bias
@@ -108,16 +119,14 @@ def photon_transfer_curve(
     signal = np.array(all_signals)
     variance = np.array(all_variances)
 
-    # Read noise variance from config (squared median RON from read_noise_spatial)
-    # Use the PTC intercept approach: estimate from the data
     # Fit 1: Free intercept
     m_free, c_free, cov_free = _linear_least_squares(signal, variance)
     gain_free = 1.0 / m_free if m_free != 0 else np.inf
     sigma_gain_free = float(np.sqrt(cov_free[0, 0])) / (m_free ** 2) if m_free != 0 else np.inf
     ron_from_fit = float(np.sqrt(max(c_free, 0.0)))
 
-    # Fit 2: Fixed intercept — use free-fit intercept as RON² prior,
-    # or compute from bias frames if available
+    # Fit 2: Fixed intercept using the free-fit intercept as the
+    # read-noise variance estimate.
     ron_var_prior = max(c_free, 0.0)  # ADU²
 
     var_shot = variance - ron_var_prior
@@ -166,7 +175,7 @@ def photon_transfer_curve_with_ron(
     ron_var_adu2: float,
     roi: Optional[ROI] = None,
 ) -> AnalysisResult:
-    """PTC with an external RON² prior (e.g. from Step 1).
+    """PTC with an external read-noise variance prior.
 
     Same as ``photon_transfer_curve`` but the fixed-intercept fit
     uses the supplied ``ron_var_adu2`` instead of estimating from the
@@ -174,8 +183,18 @@ def photon_transfer_curve_with_ron(
 
     Parameters
     ----------
+    flat_groups : dict
+        ``{label: [file_paths]}`` — each group is a set of flat frames
+        at one exposure level.
+    bias : Frame
+        Master bias (full frame or matching ROI).
+    config : SensorConfig
+        Detector configuration; included for consistency with other
+        characterization functions.
     ron_var_adu2 : float
         Read noise variance in ADU² (from bias frame analysis).
+    roi : ROI, optional
+        Region of interest for statistics.
     """
     bias_roi = bias
     if roi is not None:
@@ -260,7 +279,7 @@ def full_well_capacity(
     ptc_result : AnalysisResult
         Output of ``photon_transfer_curve()``.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     """
     signal = ptc_result.metadata["signal"]
     variance = ptc_result.metadata["variance"]
@@ -269,14 +288,13 @@ def full_well_capacity(
     max_signal_adu = float(signal.max())
     max_signal_e = max_signal_adu * gain
 
-    # Look for PTC turnover: find where variance starts decreasing
-    # Sort by signal and look for slope change
+    # Look for PTC turnover by sorting by signal and checking for a
+    # sustained slope change.
     order = np.argsort(signal)
     sig_sorted = signal[order]
     var_sorted = variance[order]
 
-    # Simple approach: find where running slope becomes negative
-    # Use a sliding window of ~10% of data points
+    # Use a sliding window of approximately 10% of the data points.
     window = max(5, len(sig_sorted) // 10)
     turnover_adu = None
 
@@ -334,7 +352,7 @@ def noise_decomposition(
     ptc_var : 1-D array
         Measured Var(diff)/2 (ADU²).
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
 
     Returns
     -------

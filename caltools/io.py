@@ -1,8 +1,10 @@
 """
 caltools.io — FITS loading, file grouping, and header parsing.
 
-Handles QHY268M specifics: BZERO=32768, missing GAIN keyword,
-memmap=False requirement for astropy scaling.
+Uses ``memmap=False`` on reads so astropy applies BSCALE/BZERO scaling
+in-memory. Some FITS writers store unsigned integer image data with
+``BZERO=32768``; applying the scaling on read avoids unscaled-view
+pitfalls in downstream array operations.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from astropy.io import fits
 from ._types import Frame, FrameCube, ROI, SensorConfig
 
 # TheSkyX naming convention: 8-digit index + ImageType + ExptimeSecs
-_FILENAME_RE = re.compile(r'^(\d{8})(Dark|FlatField)([\d.]+)secs')
+_FILENAME_RE = re.compile(r'^(\d{8})(Bias|Dark|FlatField|Light)([\d.]+)secs')
 
 
 def load_frame(
@@ -29,8 +31,9 @@ def load_frame(
 ) -> Frame:
     """Load a single FITS frame.
 
-    Handles BZERO=32768 scaling by using ``memmap=False`` (required for
-    QHY268M headers where astropy applies in-memory scaling).
+    Uses ``memmap=False`` so astropy applies BSCALE/BZERO scaling
+    in-memory at read time, avoiding unscaled-view pitfalls when the
+    header stores unsigned integer data with ``BZERO``.
 
     Parameters
     ----------
@@ -56,6 +59,9 @@ def load_cube(
 
     Warns if the resulting cube exceeds 4 GB.
     """
+    if not paths:
+        raise ValueError("load_cube: paths is empty")
+
     first = load_frame(paths[0], roi=roi, dtype=dtype)
     ny, nx = first.shape
     n = len(paths)
@@ -80,9 +86,12 @@ def load_cube_chunked(
     roi: Optional[ROI] = None,
     dtype: type = np.float32,
 ) -> Generator[Tuple[slice, FrameCube], None, None]:
-    """Yield ``(row_slice, sub_cube)`` chunks for memory-bounded processing.
+    """Yield ``(row_slice, sub_cube)`` chunks of the cube row-strip by row-strip.
 
-    Each yielded sub_cube has shape ``(n_frames, chunk_height, nx)``.
+    Each yielded sub_cube has shape ``(n_frames, chunk_height, nx)``. The
+    full cube is loaded once; chunking limits per-iteration allocations
+    in downstream reducers (e.g. master_bias) but does not bound the
+    cube's own memory — for that, downsample paths or use ROI.
 
     Parameters
     ----------
@@ -91,28 +100,24 @@ def load_cube_chunked(
     chunk_rows : int
         Number of rows per chunk (default 50).
     roi : ROI, optional
-        Global ROI applied before chunking (column slice preserved,
-        row slice subdivided).
+        Global ROI applied before chunking.
     dtype : type
         Output dtype.
     """
-    first = load_frame(paths[0], roi=roi, dtype=dtype)
-    ny, nx = first.shape
-    n = len(paths)
+    if not paths:
+        raise ValueError("load_cube_chunked: paths is empty")
 
+    cube = load_cube(paths, roi=roi, dtype=dtype)
+    ny = cube.shape[1]
     for r0 in range(0, ny, chunk_rows):
         r1 = min(r0 + chunk_rows, ny)
-        row_sl = slice(r0, r1)
-        chunk = np.empty((n, r1 - r0, nx), dtype=dtype)
-        for i, p in enumerate(paths):
-            frame = load_frame(p, roi=roi, dtype=dtype)
-            chunk[i] = frame[row_sl, :]
-        yield row_sl, chunk
+        yield slice(r0, r1), cube[:, r0:r1, :]
 
 
 def sensor_config_from_header(
     path: str,
     gain: float = 1.0,
+    pixel_size_um: Optional[float] = None,
 ) -> SensorConfig:
     """Build a ``SensorConfig`` from FITS header keywords.
 
@@ -121,18 +126,40 @@ def sensor_config_from_header(
     path : str
         Path to any FITS file from the session.
     gain : float
-        Conversion gain in e-/ADU (TheSkyX does not write a GAIN keyword
-        for QHY cameras, so this must be supplied or measured via PTC).
+        Conversion gain in e-/ADU. Many acquisition systems do not write
+        a reliable ``GAIN`` keyword, so this must be supplied or measured
+        separately.
+    pixel_size_um : float, optional
+        Override pixel pitch when ``XPIXSZ`` is missing. If both are
+        absent, raises rather than guessing.
+
+    Notes
+    -----
+    Detector temperature falls back to NaN (not 0 C) when ``CCD-TEMP`` is
+    absent, so downstream code can detect missing data instead of
+    silently treating it as a real reading.
     """
     hdr = fits.getheader(path)
+
+    if "XPIXSZ" in hdr:
+        pix = float(hdr["XPIXSZ"])
+    elif pixel_size_um is not None:
+        pix = float(pixel_size_um)
+    else:
+        raise KeyError(
+            "FITS header is missing XPIXSZ; pass pixel_size_um explicitly."
+        )
+
+    temp = float(hdr["CCD-TEMP"]) if "CCD-TEMP" in hdr else float("nan")
+
     return SensorConfig(
         nx=int(hdr["NAXIS1"]),
         ny=int(hdr["NAXIS2"]),
-        pixel_size_um=float(hdr.get("XPIXSZ", 3.76)),
+        pixel_size_um=pix,
         gain_e_per_adu=gain,
-        temperature_c=float(hdr.get("CCD-TEMP", 0.0)),
+        temperature_c=temp,
         bitdepth=int(hdr.get("BITPIX", 16)),
-        sensor_name=str(hdr.get("INSTRUME", "QHY268M")),
+        sensor_name=str(hdr.get("INSTRUME", "Unknown")),
     )
 
 

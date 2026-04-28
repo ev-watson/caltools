@@ -9,7 +9,7 @@ type aliases for frame arrays.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 
@@ -31,7 +31,7 @@ class SensorConfig:
     Parameters
     ----------
     nx, ny : int
-        Sensor dimensions in pixels (columns, rows).
+        Detector dimensions in pixels (columns, rows).
     pixel_size_um : float
         Pixel pitch in micrometres.
     gain_e_per_adu : float
@@ -50,7 +50,7 @@ class SensorConfig:
     gain_e_per_adu: float
     temperature_c: float
     bitdepth: int = 16
-    sensor_name: str = "QHY268M"
+    sensor_name: str = "Unknown"
 
     def central_roi(self, height: int = 2000, width: int = 3000) -> ROI:
         """Return a centred ROI as ``(row_slice, col_slice)``."""

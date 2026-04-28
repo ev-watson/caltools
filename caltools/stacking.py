@@ -1,7 +1,8 @@
 """
 caltools.stacking — Master frame construction (bias, dark, flat).
 
-Uses chunked row-wise processing to keep memory bounded.
+Combines calibration-frame stacks with median or mean reducers and
+optional row-strip processing.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from typing import List, Optional
 import numpy as np
 
 from ._types import Frame, ROI
-from .io import load_cube, load_cube_chunked, load_frame
+from .io import load_cube_chunked, load_frame
 
 
 def master_bias(
@@ -22,9 +23,9 @@ def master_bias(
 ) -> Frame:
     """Construct a master bias from a stack of bias frames.
 
-    Uses chunked row-wise processing: at ``chunk_rows=50`` with 100 frames,
-    each chunk is ~126 MB.  The median with N >= 100 frames is already
-    extremely robust against RTN/S&P outliers (Alarcon+2023).
+    Uses row-strip processing via ``load_cube_chunked``. Median combination
+    is the default because it suppresses transient pixel excursions in
+    larger stacks.
 
     Parameters
     ----------
@@ -107,7 +108,7 @@ def master_flat(
     chunk_rows: int = 50,
     roi: Optional[ROI] = None,
 ) -> Frame:
-    """Construct a normalised master flat (EMVA-1288 Sec. 8.1).
+    """Construct a normalized master flat.
 
     Parameters
     ----------
@@ -133,12 +134,22 @@ def master_flat(
     ny, nx = first.shape
 
     bias_use = bias
-    if bias.shape != (ny, nx) and roi is not None:
-        bias_use = bias[roi[0], roi[1]]
+    if bias.shape != (ny, nx):
+        if roi is not None:
+            bias_use = bias[roi[0], roi[1]]
+        if bias_use.shape != (ny, nx):
+            raise ValueError(
+                f"Bias shape {bias_use.shape} != frame shape ({ny}, {nx})"
+            )
 
     dark_use = dark
-    if dark is not None and dark.shape != (ny, nx) and roi is not None:
-        dark_use = dark[roi[0], roi[1]]
+    if dark is not None and dark.shape != (ny, nx):
+        if roi is not None:
+            dark_use = dark[roi[0], roi[1]]
+        if dark_use.shape != (ny, nx):
+            raise ValueError(
+                f"Dark shape {dark_use.shape} != frame shape ({ny}, {nx})"
+            )
 
     master = np.empty((ny, nx), dtype=np.float32)
 

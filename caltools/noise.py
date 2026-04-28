@@ -1,18 +1,19 @@
 """
-caltools.noise — Read noise, banding, DSNU, FPN, and RTN detection.
+caltools.noise — Read noise, banding, DSNU, FPN, and unstable pixels.
 
-Methods follow Alarcon+2023 (sCMOS characterization) and EMVA-1288 v4.0.
+Functions for read-noise maps, fixed-pattern structure, row/column
+profiles, and temporally unstable pixels.
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 from scipy.fft import rfft, rfftfreq
 
-from ._types import AnalysisResult, Frame, FrameCube, ROI, SensorConfig
-from .stats import WelfordAccumulator, mad_sigma, outlier_mask
+from ._types import AnalysisResult, Frame, FrameCube, SensorConfig
+from .stats import WelfordAccumulator, mad_sigma
 
 
 def read_noise_map(
@@ -63,20 +64,20 @@ def read_noise_spatial(
     rn_map: Frame,
     config: SensorConfig,
 ) -> AnalysisResult:
-    """Summarize read noise map statistics: histogram, hot pixel census.
+    """Summarize read noise map statistics and high-noise pixel counts.
 
     Parameters
     ----------
     rn_map : Frame
         Per-pixel read noise in ADU.
     config : SensorConfig
-        Sensor configuration (provides gain for electron conversion).
+        Detector configuration (provides gain for electron conversion).
 
     Returns
     -------
     AnalysisResult with scalar_summary including:
         ron_median_adu, ron_median_e, ron_rms_adu, ron_rms_e,
-        hot_3sig, hot_5sig, hot_10sig (pixel counts).
+        hot_3sig, hot_5sig, hot_10sig (high-noise pixel counts).
     """
     g = config.gain_e_per_adu
     med = float(np.median(rn_map))
@@ -169,20 +170,19 @@ def dsnu(
 ) -> AnalysisResult:
     """Compute Dark Signal Non-Uniformity decomposed into pixel/row/column.
 
-    DSNU = std(master_dark - bias) across the spatial dimensions.
-    Decomposition follows EMVA-1288 Sec. 7:
-      - Pixel DSNU: residual after removing row/column structure
-      - Row DSNU: std of row medians
-      - Column DSNU: std of column medians
+    DSNU is computed from bias-subtracted master dark frames across the
+    spatial dimensions.
+    The returned summary separates total structure into row, column, and
+    residual pixel components.
 
     Parameters
     ----------
     master_darks_by_exptime : dict
         ``{exptime: master_dark_frame}`` (bias-subtracted).
     bias : Frame
-        Master bias.
+        Master bias, retained for API compatibility.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     """
     g = config.gain_e_per_adu
     scalars = {}
@@ -269,23 +269,23 @@ def detect_rtn_pixels(
     config: SensorConfig,
     sigma_threshold: float = 3.0,
 ) -> AnalysisResult:
-    """Detect Salt & Pepper / Random Telegraph Noise pixels.
+    """Detect temporally unstable pixels in a bias stack.
 
-    Following Alarcon+2023 Sec. 3.1 & 5: RTN pixels have anomalously
-    high temporal std but normal mean bias level.
+    Flags pixels with anomalously high temporal scatter while their mean
+    bias level remains close to the frame population.
 
     Parameters
     ----------
     cube : FrameCube
         Bias cube ``(n_frames, ny, nx)``.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     sigma_threshold : float
-        Number of RMS-RON above which a pixel is flagged as S&P.
+        Number of RMS read-noise units above which a pixel is flagged.
 
     Returns
     -------
-    AnalysisResult with the S&P mask and pixel statistics.
+    AnalysisResult with the unstable-pixel mask and pixel statistics.
     """
     pixel_mean = np.mean(cube, axis=0, dtype=np.float64)
     pixel_std = np.std(cube, axis=0, dtype=np.float64)
@@ -298,7 +298,7 @@ def detect_rtn_pixels(
     med_bias = float(np.median(pixel_mean))
     mad_bias = mad_sigma(pixel_mean)
 
-    # S&P: high temporal std, normal mean bias
+    # High temporal scatter with an otherwise typical mean bias level.
     sp_mask = (
         (pixel_std > sigma_threshold * rms_ron)
         & (np.abs(pixel_mean - med_bias) < 5 * mad_bias)

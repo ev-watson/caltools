@@ -1,8 +1,8 @@
 """
-caltools.linearity — Detector linearity test and EMVA-1288 linearity error.
+caltools.linearity — Detector linearity tests and residual error metrics.
 
 Measures signal vs exposure linearity from a flat-field ramp,
-computes residuals, and reports EMVA-1288 LE (Linearity Error).
+computes residuals, and reports fractional linearity error.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import numpy as np
 
 from ._types import AnalysisResult, Frame, ROI, SensorConfig
 from .io import load_frame
-from .stacking import master_flat
 
 
 def linearity_test(
@@ -31,9 +30,9 @@ def linearity_test(
     bias : Frame
         Master bias.
     config : SensorConfig
-        Sensor configuration.
+        Detector configuration.
     roi : ROI, optional
-        Central ROI for statistics.
+        Region of interest for statistics.
 
     Returns
     -------
@@ -103,7 +102,7 @@ def linearity_test(
 def linearity_error(
     linearity_result: AnalysisResult,
 ) -> AnalysisResult:
-    """Compute EMVA-1288 Linearity Error from linearity test results.
+    """Compute fractional linearity error from linearity test results.
 
     LE = residual / fitted_value * 100 (%)
 
@@ -121,7 +120,7 @@ def linearity_error(
     residuals = meta["residuals_adu"]
     predicted = meta["predicted_adu"]
 
-    # EMVA-1288 LE: residual / fit * 100%
+    # Linearity error: residual / fit * 100%
     # Avoid division by zero at zero signal
     safe_pred = np.where(np.abs(predicted) > 1.0, predicted, 1.0)
     le_percent = (residuals / safe_pred) * 100.0

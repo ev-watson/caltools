@@ -1,7 +1,7 @@
 """
 caltools.plotting — Visualization helpers for detector characterization.
 
-Standardized figure functions used throughout the reduction notebook.
+Reusable figure helpers for detector characterization outputs.
 """
 
 from __future__ import annotations
