@@ -12,7 +12,6 @@ __version__ = "0.1.0"
 from ._types import AnalysisResult, Frame, FrameCube, ROI, SensorConfig
 
 from .io import (
-    get_file_index,
     get_timestamps,
     group_by_type_and_exposure,
     load_cube,
@@ -24,7 +23,7 @@ from .io import (
 from .stacking import master_bias, master_dark, master_flat
 
 from .stats import (
-    WelfordAccumulator,
+    WelfordVariance,
     gaussianity_tests,
     mad_sigma,
     outlier_mask,
@@ -36,6 +35,7 @@ from .noise import (
     dsnu,
     fpn,
     read_noise_map,
+    read_noise_map_from_paths,
     read_noise_spatial,
     row_column_noise,
 )
@@ -47,9 +47,10 @@ from .dark import (
     warm_pixel_map,
 )
 
-from .gain import (
+from .flat import (
     full_well_capacity,
     noise_decomposition,
+    momsdom,
     photon_transfer_curve,
     photon_transfer_curve_with_ron,
 )
@@ -61,7 +62,9 @@ from .prnu import prnu_map
 from .plotting import (
     histogram_gaussian_overlay,
     image_with_colorbar,
+    quick_view,
     noise_map_with_histogram,
+    momsdom_plot,
     ptc_plot,
     summary_table,
 )
@@ -78,16 +81,16 @@ __all__ = [
     "sensor_config_from_header",
     "group_by_type_and_exposure",
     "get_timestamps",
-    "get_file_index",
     "master_bias",
     "master_dark",
     "master_flat",
-    "WelfordAccumulator",
+    "WelfordVariance",
     "gaussianity_tests",
     "mad_sigma",
     "outlier_mask",
     "sigma_vs_mean_2d",
     "read_noise_map",
+    "read_noise_map_from_paths",
     "read_noise_spatial",
     "row_column_noise",
     "dsnu",
@@ -105,6 +108,7 @@ __all__ = [
     "linearity_error",
     "prnu_map",
     "image_with_colorbar",
+    "quick_view",
     "ptc_plot",
     "histogram_gaussian_overlay",
     "noise_map_with_histogram",
