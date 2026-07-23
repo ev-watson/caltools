@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # type: ignore
 import numpy as np
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1 import make_axes_locatable  # type: ignore
 
 from ._types import AnalysisResult
 
@@ -68,7 +68,7 @@ def quick_view(file_path: str) -> None:
     file_path : str
         Path to FITS file.
     """
-    from astropy.io import fits
+    from astropy.io import fits # type: ignore
 
     data = fits.getdata(file_path, memmap=False)
     fig, ax = plt.subplots()
@@ -197,7 +197,7 @@ def histogram_gaussian_overlay(
     label_data : str
         Legend label for the histogram.
     """
-    from scipy import stats as sp_stats
+    from scipy import stats as sp_stats # type: ignore
 
     flat = data.ravel()
     mu, sig = np.mean(flat), np.std(flat)
